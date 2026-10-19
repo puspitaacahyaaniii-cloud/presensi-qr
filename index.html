@@ -1,0 +1,136 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Presensi Siswa QR</title>
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f1f5f2;
+      color: #263d30;
+      margin: 0;
+      padding: 20px;
+    }
+    .card {
+      max-width: 450px;
+      margin: 20px auto;
+      background: white;
+      padding: 20px;
+      border-radius: 16px;
+      box-shadow: 0 4px 15px #0001;
+    }
+    h2, p { text-align: center; }
+    #reader { width: 100%; margin: 20px auto; }
+    #hasil {
+      white-space: pre-line;
+      background: #eef5ef;
+      padding: 14px;
+      border-radius: 10px;
+      overflow-wrap: anywhere;
+    }
+    button {
+      width: 100%;
+      padding: 14px;
+      margin-top: 12px;
+      border: 0;
+      border-radius: 9px;
+      background: #2f6b4f;
+      color: white;
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Presensi Siswa</h2>
+    <p>SD Negeri 1 Negara Batin</p>
+    <div id="reader"></div>
+    <div id="hasil">Tekan tombol untuk memulai scan.</div>
+    <button id="mulai">Mulai Scan</button>
+  </div>
+
+  <script>
+    const WEB_APP_URL =
+      "https://script.google.com/macros/s/AKfycbw4bpo-GAcnFEmilIzYnvNJzqytG-IEFge1F8wPCIUFcE8if8Cg1CPzQPSitnZbbdvLSw/exec";
+
+    let scanner;
+    let proses = false;
+
+    function hasil(teks) {
+      document.getElementById("hasil").textContent = teks;
+    }
+
+    document.getElementById("mulai").onclick = async () => {
+      try {
+        if (!window.Html5Qrcode) {
+          hasil("Pemindai gagal dimuat. Periksa koneksi internet.");
+          return;
+        }
+
+        if (!scanner) scanner = new Html5Qrcode("reader");
+
+        hasil("Meminta izin kamera iPhone...");
+
+        await scanner.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: { width: 220, height: 220 } },
+          kode => {
+            if (proses) return;
+            proses = true;
+            scanner.pause(true);
+            hasil("QR terbaca. Memeriksa data siswa...");
+
+            const callback = "presensiCallback";
+            const url = WEB_APP_URL
+              + "?action=scan&kode=" + encodeURIComponent(kode)
+              + "&callback=" + callback
+              + "&t=" + Date.now();
+
+            window[callback] = res => {
+              delete window[callback];
+
+              if (res.success) {
+                hasil(
+                  "✓ " + res.message +
+                  "\nNama: " + res.nama +
+                  "\nNIS: " + res.nis +
+                  "\nKelas: " + res.kelas +
+                  "\nWaktu: " + res.waktu
+                );
+              } else {
+                hasil(res.message || "Absensi gagal.");
+              }
+
+              setTimeout(() => {
+                proses = false;
+                try { scanner.resume(); } catch (_) {}
+              }, 2500);
+            };
+
+            const script = document.createElement("script");
+            script.src = url;
+            script.onerror = () => {
+              delete window[callback];
+              hasil("Gagal menghubungi server. Periksa deployment Apps Script.");
+              setTimeout(() => {
+                proses = false;
+                try { scanner.resume(); } catch (_) {}
+              }, 2500);
+            };
+            document.body.appendChild(script);
+            script.onload = () => script.remove();
+          }
+        );
+
+        hasil("Kamera aktif. Arahkan ke QR Code siswa.");
+      } catch (err) {
+        hasil("Kamera gagal dibuka: " + err.message
+          + "\nBuka halaman melalui HTTPS dan izinkan kamera di Safari.");
+      }
+    };
+  </script>
+</body>
+</html>
